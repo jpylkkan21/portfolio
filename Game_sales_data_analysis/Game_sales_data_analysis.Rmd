@@ -1,0 +1,148 @@
+---
+title: "Game Sales Data Analysis"
+author: "Jussi Pylkkänen"
+date: '`r Sys.Date()`'
+output:
+  pdf_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Abstract
+
+This project aims to analyze the factors influencing video game sales across the globe. The analysis focuses on identifying trends and patterns of games in different regions of the world. Through data analysis and visualization, we find out the varying sales dynamics across regions, platforms, genres and publishers. Key findings include the significant difference in sales between Japan and global markets, the top-performing genres for Nintendo, Activision and Electronic Arts, and lastly, the observation that, apart from sales in different regions, publisher and platform play the biggest roles in predicting global sales.
+
+### Introduction
+
+The dataset used is from https://www.kaggle.com/datasets/gregorut/videogamesales made by GREGORYSMITH.
+The data is originally scraped from vgchartz.com which tracks and analyzes global video game and console sales data.
+
+In this dataset we have console game sales from across the globe. We have 10 variables: Games name, Platform, Release year, Genre, Publisher, North America Sales, Europe sales, Japan Sales, Other Sales and Global Sales. Sales are in millions. We have 16598 observations before preprocessing.
+
+In this project I will show some graphs which showcase different data trends and patterns, see which genres are most profitable for certain publishers and see which variables are the most important for global sales.
+
+### Data trends and Patterns
+
+First let's bring the data in and preprocess it slightly to make a more usable format for analysis and visualization.
+
+```{r libraries, echo=TRUE, include=FALSE}
+library(readr)
+library(dplyr)
+library(ggplot2)
+library(randomForest)
+```
+
+
+```{r preprocess}
+set.seed(123) #For reproducibility
+
+sales_data <- read_csv("vgsales.csv", show_col_types = FALSE)
+#Check to see if we have any empty values
+print(colSums(is.na(sales_data) | sales_data == "N/A", na.rm = TRUE))
+
+factor_list <- c('Platform', 'Genre', 'Publisher') #Factorize these variables
+for (i in 1:length(factor_list)) {
+  sales_data[[factor_list[i]]] <- as.factor(sales_data[[factor_list[i]]])
+}
+
+sales_data <- sales_data %>% #Filter out N/A from Year variable
+  filter(Year != "N/A") %>%
+  mutate(Year = as.numeric(Year))
+
+platform_sales_Global <- sales_data %>%  #Group all Global sales of games for a platform together
+  group_by(Platform) %>%
+  summarize(Total_Sales_Global = sum(Global_Sales, na.rm = TRUE))
+
+platform_sales_JP <- sales_data %>%  #Group all Japan sales of games for a platform together
+  group_by(Platform) %>%
+  summarize(Total_Sales_JP = sum(JP_Sales, na.rm = TRUE))
+```
+
+Next let's produce some graphs to showcase some trends. We can see that the global sales and sales in Japan differ quite a lot. For example Playstations 1, 2, 3 and Nintendo DS have done well in both groups, but we can see that consoles by Nintendo like 3DS, Gameboy (GB), NES and SNES have sold proportionally better in Japan than globally. And on the other hand, the Xbox consoles (X360, XB, XOne) didn't really sell much in Japan. This is likely due to Sony (Playstation) and Nintendo being originally Japanese companies and Xbox is an American company. 
+
+Japan has an unique market when compared to western society. Japanese companies can better market their products to Japanese people than western companies can. This same trend is seen in other places aswell, for example Toyota being the leading car manufacturer in Japan. We can see this difference between western market and Japanese market in the correlation table as well. We can see that all the other sales correlate much better between each other than with sales in Japan. 
+
+```{r graphs}
+#Global sales by Platform
+ggplot(platform_sales_Global, aes(x = Platform, y = Total_Sales_Global)) +
+  geom_bar(stat = 'identity', fill = '#346beb') +
+  labs(x = "Platform", y = "Total Sales (millions)", title = "Total Sales of Games Globally by Platform") +
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.text.x = element_text(angle = 45, hjust = 1)) #Rotate labels for readability
+
+#Japan sales by Platform
+ggplot(platform_sales_JP, aes(x = Platform, y = Total_Sales_JP)) +
+  geom_bar(stat = "identity", fill = '#f22241') +
+  labs(x = "Platform", y = "Total Sales (millions)", title = "Total Sales of Games in Japan by Platform") +
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.text.x = element_text(angle = 45, hjust = 1))
+
+#Correlations
+library(ggcorrplot)
+numeric_data <- sales_data %>%
+  select(Global_Sales, NA_Sales, JP_Sales, EU_Sales, Other_Sales)
+
+cor_matrix <- cor(numeric_data, use = "complete.obs")
+ggcorrplot(cor_matrix, lab = TRUE)
+```
+Next we can see the trend of console game sales through the years. 2008 seemed to be the best year for console game sales. After that the numbers have gone significantly down, and in the year 2018 the site VGChartz.com stopped producing estimates for software sales because the digital market makes it more difficult to produce reliable retail estimates (https://www.vgchartz.com/methodology.php). Other than that this could be caused by many things. PS3, Xbox360, Nintendo Wii and Nintendo DS all came out withing a few years of 2008. Them being some of the most popular consoles, you could expect more games to be sold during that time. But my best guess would also be the increased popularity of PC gaming, which is not taken into account in this dataset.
+
+```{r graph year}
+#Global sales by Year
+sales_data_by_year <- sales_data %>%
+  filter(Year != "N/A") %>%
+  mutate(Year = as.numeric(Year)) %>%
+  group_by(Year) %>%
+  summarize(Total_Sales_Global = sum(Global_Sales, na.rm = TRUE))
+
+max_year <- sales_data_by_year$Year[which.max(sales_data_by_year$Total_Sales_Global)]
+ggplot(sales_data_by_year, aes(x = Year, y = Total_Sales_Global, group = 1)) +
+  geom_line() +
+  geom_vline(xintercept = max_year, linetype = "dashed", color = "red") +
+  labs(title = "Global Sales Over Time", x = "Year", y = "Total Global Sales") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+Next a small discussion about the importance of genre for different publishers. We will use linear regression to see which genres have sold the best for Nintendo, Activision and Electronic Arts. The variables serving as the respective reference categories will be "Sports", "Shooter" and "Racing". My guess was that those were the best performing genres for each of these three publishers.
+
+In the linear regression output we can simply see that if the estimate is negative, that level performs worse than the reference, and if it's positive it performs better. And the Pr(>|t|) (p-value) gives us an indicator of how strongly the data gives evidence to support the estimate. Generally p-value of 0.05 and lower is held as being "statistically significant" but it is not a straight yes or no answer. We can just see here that a lower p-value means that the estimate is more believable. In the output also marked by the amount of stars.
+
+For Nintendo we can see that Sports games seem to be the best sellers. For Activision Shooters seem to also be the best sellers. Lastly for Electronic Arts, racing games seem to be better sellers than most. Although there is some indication that shooter games might perform better, but the p-value suggest that there is not enough evidence to draw a definite conclusion.
+
+```{r linreg}
+compare_publisher_genres <- function(publisher_name, genre_name) {
+  sales_data_filtered <- sales_data %>%
+    filter(Publisher == publisher_name)
+  
+  sales_data_filtered$Genre <- relevel(sales_data_filtered$Genre, ref = genre_name)
+  
+  lm_model <- lm(Global_Sales ~ Genre, data = sales_data_filtered)
+  summary(lm_model)
+}
+
+compare_publisher_genres("Nintendo", "Sports")
+compare_publisher_genres("Activision", "Shooter")
+compare_publisher_genres("Electronic Arts", "Racing")
+
+```
+
+Here we use random forests to see which of the variables have the highest predictive power to the global sales. In summary, higher %IncMSE (Mean Squared Error) and IncNodePurity indicate that the variable is a better predictor for the target variable.
+
+We can see that sales in Europe and North America are the most important variables in explaining global sales. Which are higher than sales in Japan and other parts of the world. This is the same trend we saw on the graphs. Other than those, we can see that the platform and publisher are the most important factors in game sales. This is fairly straightforward logic: More popular consoles and publishers lead to better global sales. And finally we can see that the genre and release year of the game have had the least amount of impact on global sales. 
+
+```{r randomForest}
+publisher_freq <- table(sales_data$Publisher)
+threshold <- 50
+sales_data$Publisher <- ifelse(sales_data$Publisher %in% names(publisher_freq[publisher_freq < threshold]), 
+                         "Other", 
+                         sales_data$Publisher)
+sales_data$Publisher <- as.factor(sales_data$Publisher)
+
+rf_model <- randomForest(Global_Sales ~ Platform + Year + Genre + Publisher + 
+                           JP_Sales + EU_Sales + NA_Sales + Other_Sales, data = sales_data, importance = TRUE)
+importance(rf_model)
+```
+
