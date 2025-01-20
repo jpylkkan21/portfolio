@@ -10,7 +10,7 @@ The project includes:
 - **Random forest**: Evaluating the significance of different variables.
 You can access this project in both PDF and RMarkdown formats under the "Game_sales_data_analysis" folder.
 
-Thank you for visiting my portfolio. I look forward to sharing more work soon"
+Thank you for visiting my portfolio. I look forward to sharing more work soon!
 
 Best regards,
 Jussi Pylkkänen
