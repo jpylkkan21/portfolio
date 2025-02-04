@@ -18,7 +18,7 @@ This project includes:
 - **Text classification**: Training a model to distinguish between spam and non-spam messages.
 - **Bayesian probability**: Calculating the likelihood of a message being spam based on word frequencies.
 
-You can access this project in both PDF and RMarkdown formats under the "spam_filter" folder.
+You can access this project in both PDF and RMarkdown formats under the "Spam_filter" folder.
 
 
 ## Planned Projects
